@@ -1,0 +1,458 @@
+﻿@{
+    Layout = null;
+    var config = ViewBag.OptimalConfig as PlantDashboard.Models.PlantRoomConfig;
+}
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>🌱 PlantSense Dashboard | Мониторинг среды для растений</title>
+    
+    <!-- CDN библиотеки -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/7.0.5/signalr.min.js"></script>
+    
+    <style>
+        :root {
+        --bg-dark: #0a0e1a;
+        --card-bg: #111827;
+        --border-color: #1f2937;
+        --text-primary: #f3f4f6;
+        --text-secondary: #9ca3af;
+        --success: #10b981;
+        --warning: #f59e0b;
+        --danger: #ef4444;
+        --info: #3b82f6;
+        --purple: #8b5cf6;
+        }
+        
+        * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        }
+        
+        body {
+        background: var(--bg-dark);
+        color: var(--text-primary);
+        font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+        padding: 20px;
+        }
+        
+        /* Графана-стиль скролла */
+        ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+        background: var(--border-color);
+        border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb {
+        background: #4b5563;
+        border-radius: 4px;
+        }
+        
+        .dashboard-header {
+        margin-bottom: 30px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 15px;
+        }
+        
+        .logo {
+        font-size: 1.8rem;
+        font-weight: 700;
+        background: linear-gradient(135deg, #10b981, #3b82f6);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        }
+        
+        .timestamp-badge {
+        background: var(--card-bg);
+        padding: 8px 16px;
+        border-radius: 30px;
+        border: 1px solid var(--border-color);
+        font-size: 0.9rem;
+        font-family: monospace;
+        }
+        
+        /* Карточки метрик */
+        .metric-card {
+        background: var(--card-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 16px;
+        padding: 20px;
+        transition: all 0.2s ease;
+        height: 100%;
+        }
+        
+        .metric-card:hover {
+        border-color: #374151;
+        transform: translateY(-2px);
+        }
+        
+        .metric-icon {
+        font-size: 2rem;
+        margin-bottom: 12px;
+        }
+        
+        .metric-value {
+        font-size: 2.5rem;
+        font-weight: 700;
+        margin: 10px 0;
+        font-family: 'JetBrains Mono', monospace;
+        }
+        
+        .metric-label {
+        color: var(--text-secondary);
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        }
+        
+        .health-indicator {
+        width: 100%;
+        height: 6px;
+        background: var(--border-color);
+        border-radius: 3px;
+        margin-top: 12px;
+        overflow: hidden;
+        }
+        
+        .health-fill {
+        height: 100%;
+        border-radius: 3px;
+        transition: width 0.3s ease;
+        }
+        
+        /* Графики */
+        .chart-card {
+        background: var(--card-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 16px;
+        padding: 20px;
+        margin-bottom: 25px;
+        }
+        
+        .chart-title {
+        font-size: 1rem;
+        font-weight: 600;
+        margin-bottom: 20px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--text-secondary);
+        }
+        
+        canvas {
+        max-height: 280px;
+        width: 100% !important;
+        }
+        
+        .status-badge {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 500;
+        }
+        
+        .status-optimal { background: var(--success); color: #000; }
+        .status-warning { background: var(--warning); color: #000; }
+        .status-critical { background: var(--danger); color: #fff; }
+        
+        @@keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+        }
+        .live-badge {
+        animation: pulse 1.5s infinite;
+        }
+        
+        @@media (max-width: 768px) {
+        .metric-value { font-size: 1.8rem; }
+        body { padding: 12px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container-fluid px-0">
+        <div class="dashboard-header">
+            <div>
+                <div class="logo">
+                    <i class="fas fa-leaf me-2"></i>PlantSense Dashboard
+                </div>
+                <div class="text-secondary small mt-1">Экологический мониторинг для активного роста растений</div>
+            </div>
+            <div class="d-flex gap-2 align-items-center">
+                <span class="live-badge"><i class="fas fa-circle text-danger me-1" style="font-size: 0.7rem;"></i> LIVE</span>
+                <div class="timestamp-badge" id="liveTimestamp">
+                    <i class="far fa-clock me-1"></i>Обновление...
+                </div>
+            </div>
+        </div>
+    
+        <!-- 6 основных метрик -->
+        <div class="row g-4 mb-4">
+            <div class="col-md-4 col-xl-2">
+                <div class="metric-card">
+                    <div class="metric-icon"><i class="fas fa-thermometer-half"></i></div>
+                    <div class="metric-label">Температура</div>
+                    <div class="metric-value" id="tempValue">-- °C</div>
+                    <div class="health-indicator">
+                        <div class="health-fill" id="tempFill" style="width: 0%; background: var(--info);"></div>
+                    </div>
+                    <div class="small text-secondary mt-2">Оптимум: 18-30°C</div>
+                </div>
+            </div>
+            <div class="col-md-4 col-xl-2">
+                <div class="metric-card">
+                    <div class="metric-icon"><i class="fas fa-tint"></i></div>
+                    <div class="metric-label">Влажность воздуха</div>
+                    <div class="metric-value" id="humValue">-- %</div>
+                    <div class="health-indicator">
+                        <div class="health-fill" id="humFill" style="width: 0%; background: var(--info);"></div>
+                    </div>
+                    <div class="small text-secondary mt-2">Оптимум: 50-80%</div>
+                </div>
+            </div>
+            <div class="col-md-4 col-xl-2">
+                <div class="metric-card">
+                    <div class="metric-icon"><i class="fas fa-seedling"></i></div>
+                    <div class="metric-label">Влажность почвы</div>
+                    <div class="metric-value" id="soilValue">-- %</div>
+                    <div class="health-indicator">
+                        <div class="health-fill" id="soilFill" style="width: 0%; background: var(--info);"></div>
+                    </div>
+                    <div class="small text-secondary mt-2">Оптимум: 40-85%</div>
+                </div>
+            </div>
+            <div class="col-md-4 col-xl-2">
+                <div class="metric-card">
+                    <div class="metric-icon"><i class="fas fa-sun"></i></div>
+                    <div class="metric-label">Освещение</div>
+                    <div class="metric-value" id="lightValue">-- klx</div>
+                    <div class="health-indicator">
+                        <div class="health-fill" id="lightFill" style="width: 0%; background: var(--warning);"></div>
+                    </div>
+                    <div class="small text-secondary mt-2">Цель: 20-40 klx</div>
+                </div>
+            </div>
+            <div class="col-md-4 col-xl-2">
+                <div class="metric-card">
+                    <div class="metric-icon"><i class="fas fa-wind"></i></div>
+                    <div class="metric-label">CO₂ уровень</div>
+                    <div class="metric-value" id="co2Value">-- ppm</div>
+                    <div class="health-indicator">
+                        <div class="health-fill" id="co2Fill" style="width: 0%; background: var(--purple);"></div>
+                    </div>
+                    <div class="small text-secondary mt-2">Норма: 400-600 ppm</div>
+                </div>
+            </div>
+            <div class="col-md-4 col-xl-2">
+                <div class="metric-card">
+                    <div class="metric-icon"><i class="fas fa-charging-station"></i></div>
+                    <div class="metric-label">Давление</div>
+                    <div class="metric-value" id="pressValue">-- hPa</div>
+                    <div class="health-indicator">
+                        <div class="health-fill" id="pressFill" style="width: 0%; background: var(--info);"></div>
+                    </div>
+                    <div class="small text-secondary mt-2">Стандарт: 1013 hPa</div>
+                </div>
+            </div>
+        </div>
+    
+        <!-- Графики в стиле Grafana -->
+        <div class="row g-4">
+            <div class="col-lg-6">
+                <div class="chart-card">
+                    <div class="chart-title">
+                        <i class="fas fa-chart-line text-primary"></i>
+                        Температура & Влажность воздуха
+                        <span class="status-badge ms-auto" id="tempStatus">--</span>
+                    </div>
+                    <canvas id="tempHumChart"></canvas>
+                </div>
+            </div>
+            <div class="col-lg-6">
+                <div class="chart-card">
+                    <div class="chart-title">
+                        <i class="fas fa-chart-line text-success"></i>
+                        Влажность почвы & Уровень CO₂
+                    </div>
+                    <canvas id="soilCo2Chart"></canvas>
+                </div>
+            </div>
+            <div class="col-lg-12">
+                <div class="chart-card">
+                    <div class="chart-title">
+                        <i class="fas fa-chart-area text-warning"></i>
+                        Освещение (дневной цикл) и Атмосферное давление
+                    </div>
+                    <canvas id="lightPressChart"></canvas>
+                </div>
+            </div>
+        </div>
+    
+        <div class="text-center text-secondary mt-4 pt-2 small">
+            <i class="fas fa-microchip me-1"></i> Симуляция датчиков | Обновление каждые 2 секунды | Данные генерируются с реалистичными трендами
+        </div>
+    </div>
+
+    <script>
+        // Настройки графиков
+        const maxDataPoints = 30;
+        let timestamps = [];
+        let tempData = [], humidityData = [], soilData = [], co2Data = [], lightData = [], pressureData = [];
+    
+        // Инициализация графиков
+        const ctx1 = document.getElementById('tempHumChart').getContext('2d');
+        const ctx2 = document.getElementById('soilCo2Chart').getContext('2d');
+        const ctx3 = document.getElementById('lightPressChart').getContext('2d');
+    
+        const tempHumChart = new Chart(ctx1, {
+        type: 'line',
+        data: {
+        labels: [],
+        datasets: [
+        { label: 'Температура (°C)', data: [], borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.05)', tension: 0.3, fill: true, yAxisID: 'y' },
+        { label: 'Влажность (%)', data: [], borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.05)', tension: 0.3, fill: true, yAxisID: 'y1' }
+        ]
+        },
+        options: {
+        responsive: true, maintainAspectRatio: true,
+        plugins: { legend: { position: 'top', labels: { color: '#9ca3af' } }, tooltip: { mode: 'index' } },
+        scales: { y: { title: { display: true, text: '°C', color: '#9ca3af' }, grid: { color: '#1f2937' }, ticks: { color: '#9ca3af' } },
+        y1: { position: 'right', title: { display: true, text: '%', color: '#9ca3af' }, grid: { drawOnChartArea: false }, ticks: { color: '#9ca3af' } },
+        x: { ticks: { color: '#9ca3af', maxRotation: 45, autoSkip: true }, grid: { color: '#1f2937' } } }
+        }
+        });
+    
+        const soilCo2Chart = new Chart(ctx2, {
+        type: 'line',
+        data: {
+        labels: [],
+        datasets: [
+        { label: 'Влажность почвы (%)', data: [], borderColor: '#8b5cf6', backgroundColor: 'rgba(139,92,246,0.05)', tension: 0.3, fill: true },
+        { label: 'CO₂ (ppm)', data: [], borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.05)', tension: 0.3, fill: true, yAxisID: 'y1' }
+        ]
+        },
+        options: {
+        responsive: true, maintainAspectRatio: true,
+        plugins: { legend: { position: 'top', labels: { color: '#9ca3af' } } },
+        scales: { y: { title: { display: true, text: '%', color: '#9ca3af' }, grid: { color: '#1f2937' }, ticks: { color: '#9ca3af' } },
+        y1: { position: 'right', title: { display: true, text: 'ppm', color: '#9ca3af' }, grid: { drawOnChartArea: false }, ticks: { color: '#9ca3af' } },
+        x: { ticks: { color: '#9ca3af', maxRotation: 45 }, grid: { color: '#1f2937' } } }
+        }
+        });
+    
+        const lightPressChart = new Chart(ctx3, {
+        type: 'line',
+        data: {
+        labels: [],
+        datasets: [
+        { label: 'Освещение (klx)', data: [], borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.1)', tension: 0.3, fill: true, borderWidth: 2 },
+        { label: 'Давление (hPa)', data: [], borderColor: '#06b6d4', backgroundColor: 'rgba(6,182,212,0.05)', tension: 0.3, fill: true, yAxisID: 'y1' }
+        ]
+        },
+        options: {
+        responsive: true, maintainAspectRatio: true,
+        plugins: { legend: { position: 'top', labels: { color: '#9ca3af' } } },
+        scales: { y: { title: { display: true, text: 'klx', color: '#9ca3af' }, grid: { color: '#1f2937' }, ticks: { color: '#9ca3af' } },
+        y1: { position: 'right', title: { display: true, text: 'hPa', color: '#9ca3af' }, grid: { drawOnChartArea: false }, ticks: { color: '#9ca3af' } },
+        x: { ticks: { color: '#9ca3af', maxRotation: 45 }, grid: { color: '#1f2937' } } }
+        }
+        });
+    
+        function updateHealthFill(value, min, max, elementId, isInverse = false) {
+        let percent = 0;
+        if (value < min) percent = (value / min) * 50;
+        else if (value > max) percent = 100 - ((value - max) / (max * 0.5)) * 50;
+        else percent = 50 + ((value - min) / (max - min)) * 50;
+        percent = Math.min(100, Math.max(0, percent));
+        
+        const fill = document.getElementById(elementId);
+        fill.style.width = percent + '%';
+        let color = '#10b981';
+        if (percent < 30 || percent > 80) color = '#ef4444';
+        else if (percent < 45 || percent > 70) color = '#f59e0b';
+        fill.style.backgroundColor = color;
+        }
+    
+        function getStatusBadge(value, minOpt, maxOpt, minCrit, maxCrit) {
+        if (value >= minOpt && value <= maxOpt) return '<span class="status-badge status-optimal"><i class="fas fa-check-circle"></i> Оптимум</span>';
+        if (value >= minCrit && value <= maxCrit) return '<span class="status-badge status-warning"><i class="fas fa-exclamation-triangle"></i> Внимание</span>';
+        return '<span class="status-badge status-critical"><i class="fas fa-skull-crosswalk"></i> Критично</span>';
+        }
+    
+        // SignalR подключение
+        const connection = new signalR.HubConnectionBuilder()
+        .withUrl("/sensorHub")
+        .configureLogging(signalR.LogLevel.Information)
+        .build();
+    
+        connection.on("ReceiveSensorData", function(data) {
+        // Обновляем метрики
+        document.getElementById('tempValue').innerHTML = data.temperature + ' °C';
+        document.getElementById('humValue').innerHTML = data.humidity + ' %';
+        document.getElementById('soilValue').innerHTML = data.soilMoisture + ' %';
+        document.getElementById('lightValue').innerHTML = data.lightIntensity + ' klx';
+        document.getElementById('co2Value').innerHTML = data.co2Level + ' ppm';
+        document.getElementById('pressValue').innerHTML = data.pressure + ' hPa';
+        
+        document.getElementById('liveTimestamp').innerHTML = '<i class="far fa-clock me-1"></i>' + new Date(data.timestamp).toLocaleTimeString();
+        
+        updateHealthFill(data.temperature, 18, 30, 'tempFill');
+        updateHealthFill(data.humidity, 50, 80, 'humFill');
+        updateHealthFill(data.soilMoisture, 40, 85, 'soilFill');
+        updateHealthFill(data.lightIntensity, 20, 40, 'lightFill');
+        updateHealthFill(data.co2Level, 400, 600, 'co2Fill');
+        updateHealthFill(data.pressure, 1000, 1025, 'pressFill');
+        
+        const tempStatusHtml = getStatusBadge(data.temperature, 20, 28, 16, 34);
+        document.getElementById('tempStatus').innerHTML = tempStatusHtml;
+        
+        // Добавляем данные в графики
+        const now = new Date(data.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+        timestamps.push(now);
+        tempData.push(data.temperature);
+        humidityData.push(data.humidity);
+        soilData.push(data.soilMoisture);
+        co2Data.push(data.co2Level);
+        lightData.push(data.lightIntensity);
+        pressureData.push(data.pressure);
+        
+        if (timestamps.length > maxDataPoints) {
+        timestamps.shift(); tempData.shift(); humidityData.shift();
+        soilData.shift(); co2Data.shift(); lightData.shift(); pressureData.shift();
+        }
+        
+        // Обновляем графики
+        tempHumChart.data.labels = [...timestamps];
+        tempHumChart.data.datasets[0].data = [...tempData];
+        tempHumChart.data.datasets[1].data = [...humidityData];
+        tempHumChart.update('none');
+        
+        soilCo2Chart.data.labels = [...timestamps];
+        soilCo2Chart.data.datasets[0].data = [...soilData];
+        soilCo2Chart.data.datasets[1].data = [...co2Data];
+        soilCo2Chart.update('none');
+        
+        lightPressChart.data.labels = [...timestamps];
+        lightPressChart.data.datasets[0].data = [...lightData];
+        lightPressChart.data.datasets[1].data = [...pressureData];
+        lightPressChart.update('none');
+        });
+    
+        connection.start().catch(err => console.error(err));
+    </script>
+</body>
+</html>
