@@ -1,4 +1,4 @@
 <Solution>
   <Project Path="src/PlantDashboard.csproj" />
-  <Project Path="tests/PlantDashboard.Tests.csproj" />
+  <Project Path="tests/PlantDashboard.Tests/PlantDashboard.Tests.csproj" />
 </Solution>

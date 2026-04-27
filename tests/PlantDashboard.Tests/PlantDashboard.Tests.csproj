@@ -20,7 +20,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\src\PlantDashboard.csproj" />
+    <ProjectReference Include="..\..\src\PlantDashboard.csproj" />
   </ItemGroup>
 
   <ItemGroup>
