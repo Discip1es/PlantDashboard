@@ -1,6 +1,6 @@
-using System.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using PlantDashboard.Models;
+using System.Diagnostics;
 
 namespace PlantDashboard.Controllers;
 
